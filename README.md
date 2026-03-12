@@ -6,8 +6,8 @@ Funktioniert mit beliebig vielen Projekten — erkennt automatisch das aktuelle 
 ## Setup
 
 ```bash
-git clone https://github.com/sternenstaubfee2/ToDoList-Repo.git
-cd ToDoList-Repo
+git clone https://github.com/Sternenstaubfee2/ToDoList.git
+cd ToDoList
 pip install flask
 ```
 
@@ -18,9 +18,71 @@ export TASKBOARD="$(pwd)/cli.py"
 alias tb="python $TASKBOARD"
 
 # PowerShell ($PROFILE)
-$env:TASKBOARD = "C:\pfad\zu\ToDoList-Repo\cli.py"
+$env:TASKBOARD = "C:\pfad\zu\ToDoList\cli.py"
 function tb { python $env:TASKBOARD @args }
 ```
+
+## Setup auf neuem Rechner
+
+Wenn du das TaskBoard auf einem anderen Rechner (z.B. Arbeitsrechner) nutzen willst:
+
+### 1. Repo clonen und Abhaengigkeiten installieren
+
+```bash
+git clone https://github.com/Sternenstaubfee2/ToDoList.git
+cd ToDoList
+pip install flask
+```
+
+### 2. Claude Skill installieren (fuer Claude Code Integration)
+
+Den `ticket-committer` Skill aus dem Repo in das Claude-Skill-Verzeichnis kopieren:
+
+```bash
+# Windows (PowerShell)
+xcopy /E /I skills\ticket-committer $env:USERPROFILE\.claude\skills\ticket-committer
+
+# Windows (Git Bash)
+cp -r skills/ticket-committer ~/.claude/skills/
+
+# Mac/Linux
+cp -r skills/ticket-committer ~/.claude/skills/
+```
+
+### 3. Arbeitsprojekt registrieren
+
+Im Verzeichnis des Arbeitsprojekts:
+```bash
+cd /pfad/zum/arbeitsprojekt
+python /pfad/zu/ToDoList/cli.py init -l "Mein Arbeitsprojekt" --hook
+```
+
+Das registriert das Repo fuer Auto-Detection und installiert den Git-Hook.
+Ab sofort funktioniert alles automatisch:
+- `cli.py list` erkennt das Projekt anhand des Repos
+- Commits mit `#ticket_id` werden automatisch getrackt
+- Der `ticket-committer` Skill in Claude Code greift nahtlos
+
+### 4. Optional: Bestehende TODO.md importieren
+
+Falls das Projekt eine TODO.md hat:
+```bash
+python /pfad/zu/ToDoList/importer.py TODO.md mein_projekt "Mein Projekt" .
+```
+
+### 5. Dashboard starten
+
+```bash
+cd /pfad/zu/ToDoList && python app.py
+# -> http://localhost:5555 — zeigt alle registrierten Projekte
+```
+
+### Hinweis: data/ ist maschinenspezifisch
+
+Das `data/`-Verzeichnis ist in `.gitignore` und wird NICHT synchronisiert.
+Jeder Rechner hat seine eigenen Projekt-Registrierungen (mit lokalen Repo-Pfaden).
+Die Tickets selbst leben lokal — fuer projektuebergreifendes Tracking nutze die
+TODO.md-Sync-Funktion, die ins jeweilige Projekt-Repo schreibt.
 
 ## Dashboard starten
 
