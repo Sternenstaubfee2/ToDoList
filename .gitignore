@@ -1,0 +1,13 @@
+# Projekt-Daten sind maschinenspezifisch (absolute Repo-Pfade)
+data/
+
+# Python
+__pycache__/
+*.pyc
+
+# IDE
+.vscode/
+.idea/
+
+# Claude
+.claude/

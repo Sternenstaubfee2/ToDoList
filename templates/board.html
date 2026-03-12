@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Task Dashboard{% if project %} — {{ project.project_label }}{% endif %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body data-project="{{ current_project or '' }}">
+
+<!-- NAV -->
+<nav class="navbar">
+  <h1>TaskBoard <span>Dashboard</span></h1>
+  <div class="nav-projects">
+    {% for p in projects %}
+    <a href="/board/{{ p.id }}" class="{{ 'active' if p.id == current_project else '' }}">
+      {{ p.label }}
+    </a>
+    {% endfor %}
+  </div>
+  <div class="nav-right">
+    <button class="btn-icon" onclick="gitSync()" title="Git Sync">&#x21BB;</button>
+    <button class="btn-icon" onclick="openAddModal()" title="Neuer Task">&#x2B;</button>
+  </div>
+</nav>
+
+{% if project %}
+<!-- STATS -->
+{% set todo_count = tasks | selectattr('status', 'equalto', 'todo') | list | length %}
+{% set progress_count = tasks | selectattr('status', 'equalto', 'in-progress') | list | length %}
+{% set done_count = tasks | selectattr('status', 'equalto', 'done') | list | length %}
+<div class="stats-bar">
+  <div class="stat">
+    <span class="stat-dot" style="background: var(--col-todo)"></span>
+    <span class="stat-number">{{ todo_count }}</span> Offen
+  </div>
+  <div class="stat">
+    <span class="stat-dot" style="background: var(--col-progress)"></span>
+    <span class="stat-number">{{ progress_count }}</span> In Arbeit
+  </div>
+  <div class="stat">
+    <span class="stat-dot" style="background: var(--col-done)"></span>
+    <span class="stat-number">{{ done_count }}</span> Erledigt
+  </div>
+  <div class="stat" style="margin-left: auto; color: var(--text-muted); font-size: 12px;">
+    {{ tasks | length }} Tasks gesamt
+  </div>
+</div>
+
+<!-- BOARD -->
+<div class="board">
+  {% for col_status, col_label, col_color in [('todo', 'Offen', 'var(--col-todo)'), ('in-progress', 'In Arbeit', 'var(--col-progress)'), ('done', 'Erledigt', 'var(--col-done)')] %}
+  <div class="column">
+    <div class="column-header">
+      <span class="column-dot" style="background: {{ col_color }}"></span>
+      <h2>{{ col_label }}</h2>
+      <span class="column-count">
+        {{ tasks | selectattr('status', 'equalto', col_status) | list | length }}
+      </span>
+    </div>
+    <div class="column-body" data-status="{{ col_status }}">
+      {# Group tasks by category within each column #}
+      {% set col_tasks = tasks | selectattr('status', 'equalto', col_status) | list %}
+
+      {# Build category order from project categories #}
+      {% set cat_map = {} %}
+      {% for c in categories %}
+        {% set _ = cat_map.update({c.id: c}) %}
+      {% endfor %}
+
+      {# Collect unique categories in this column, maintaining order #}
+      {% set seen_cats = [] %}
+      {% for t in col_tasks %}
+        {% if t.category not in seen_cats %}
+          {% set _ = seen_cats.append(t.category) %}
+        {% endif %}
+      {% endfor %}
+
+      {% for cat_id in seen_cats %}
+        {% set cat = cat_map.get(cat_id, {'label': cat_id, 'color': '#9b59b6'}) %}
+        <div class="category-group">
+          <div class="category-label" style="background: {{ cat.color }}15; color: {{ cat.color }}">
+            {{ cat.label }}
+          </div>
+          {% for task in col_tasks if task.category == cat_id %}
+          <div class="task-card status-{{ task.status }}"
+               draggable="true"
+               data-id="{{ task.id }}"
+               style="border-left-color: {{ cat.color }}">
+            <div class="task-actions">
+              <button class="edit-btn" title="Bearbeiten">&#x270E;</button>
+              <button class="delete-btn" title="Löschen">&#x2715;</button>
+            </div>
+            <div class="task-title">{{ task.title }}</div>
+            {% if task.description %}
+            <div class="task-desc">{{ task.description | truncate(120) }}</div>
+            {% endif %}
+            <div class="task-meta">
+              <span class="badge badge-prio{{ task.priority }}">P{{ task.priority }}</span>
+              {% if task.effort %}
+              <span class="badge badge-effort badge-effort-{{ task.effort | lower }}">{{ task.effort }}</span>
+              {% endif %}
+              {% if task.time_estimate %}
+              <span class="badge badge-time">{{ task.time_estimate }}</span>
+              {% endif %}
+              <span class="task-id">#{{ task.id }}</span>
+              {% if task.assignee %}
+              <span class="badge badge-assignee" title="{{ task.assignee }}">{{ task.assignee[:2] | upper }}</span>
+              {% endif %}
+              {% if task.notes %}
+              <span class="task-notes-indicator" title="{{ task.notes | truncate(100) }}">&#x1F4DD;</span>
+              {% endif %}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      {% endfor %}
+
+      <button class="add-task-btn" data-status="{{ col_status }}">+ Task hinzufügen</button>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div style="text-align: center; padding: 80px 20px; color: var(--text-muted);">
+  <h2>Kein Projekt vorhanden</h2>
+  <p>Importiere eine TODO.md: <code>python importer.py &lt;pfad&gt; &lt;projekt-id&gt;</code></p>
+</div>
+{% endif %}
+
+<!-- MODAL -->
+<div id="modal-overlay" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modal-title">Neuer Task</h3>
+      <button class="modal-close" onclick="closeModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <form id="task-form" onsubmit="event.preventDefault(); submitModal();">
+        <input type="hidden" id="field-task-id">
+        <div class="form-group">
+          <label for="field-title">Titel</label>
+          <input type="text" id="field-title" placeholder="Task-Titel..." required>
+        </div>
+        <div class="form-group">
+          <label for="field-description">Beschreibung</label>
+          <textarea id="field-description" placeholder="Details..."></textarea>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="field-category">Kategorie</label>
+            <select id="field-category">
+              {% for c in categories %}
+              <option value="{{ c.id }}">{{ c.label }}</option>
+              {% endfor %}
+              <option value="general">Allgemein</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="field-priority">Priorität</label>
+            <select id="field-priority">
+              <option value="1">P1 — Hoch</option>
+              <option value="2" selected>P2 — Mittel</option>
+              <option value="3">P3 — Niedrig</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="field-status">Status</label>
+          <select id="field-status">
+            <option value="todo">Offen</option>
+            <option value="in-progress">In Arbeit</option>
+            <option value="done">Erledigt</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="field-effort">Aufwand</label>
+            <select id="field-effort">
+              <option value="">— nicht gesetzt —</option>
+              <option value="Minor">Minor (klein)</option>
+              <option value="Medium">Medium (mittel)</option>
+              <option value="Major">Major (groß)</option>
+              <option value="Epic">Epic (riesig)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="field-time-estimate">Zeitschätzung</label>
+            <input type="text" id="field-time-estimate" placeholder="z.B. 2h, 1d, 1w...">
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="field-assignee">Zugewiesen an</label>
+          <div class="assignee-row">
+            <select id="field-assignee">
+              {% for m in members|default(['Julia']) %}
+              <option value="{{ m }}" {{ 'selected' if m == 'Julia' else '' }}>{{ m }}</option>
+              {% endfor %}
+            </select>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="addMemberPrompt()">+ Person</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="field-notes">Notizen</label>
+          <textarea id="field-notes" placeholder="Eigene Notizen..."></textarea>
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-danger" id="btn-delete-task" onclick="deleteFromModal()" style="margin-right: auto; display: none;">Löschen</button>
+      <button class="btn btn-secondary" onclick="closeModal()">Abbrechen</button>
+      <button class="btn btn-primary" onclick="submitModal()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
