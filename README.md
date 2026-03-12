@@ -230,30 +230,146 @@ curl -X POST http://localhost:5555/api/<projekt>/tasks/<id>/track
 | Major  | Tagewerk, mehrere Dateien           | Rot    |
 | Epic   | Mehrtaegig, architektonische Arbeit  | Lila   |
 
+## Tickets erstellen (3 Wege)
+
+Tickets koennen jederzeit erstellt werden — nicht nur bei laufender Arbeit,
+sondern auch als Erinnerung fuer spaeter. Alle drei Wege landen im selben System.
+
+### 1. Per Claude Code (natuerliche Sprache)
+
+Einfach im Projektordner mit Claude Code arbeiten und sagen:
+
+```
+"Erstell ein Ticket: API Rate-Limiting einbauen"
+"Schreib auf: Tests fuer Login-Modul schreiben"
+"Neues Ticket: Dark Mode implementieren, Priority 3"
+"Leg ein Bug-Ticket an: Logout redirect funktioniert nicht"
+```
+
+Der `ticket-committer` Skill erkennt die Absicht automatisch, erstellt das Ticket
+im richtigen Projekt (via Auto-Detection) und zeigt dir die Ticket-ID.
+
+### 2. Per CLI (Terminal)
+
+Aus dem Projektordner heraus — Auto-Detection erkennt das Projekt:
+```bash
+python /pfad/zu/ToDoList/cli.py add "API Rate-Limiting" -c feature -P 2
+python /pfad/zu/ToDoList/cli.py add "Dark Mode" -c feature -P 3 -d "Toggle in Settings"
+```
+
+Oder von ueberall mit `-p`:
+```bash
+python /pfad/zu/ToDoList/cli.py -p api_backend add "Datenbank-Migration" -c ops -P 1
+```
+
+### 3. Per Web-Dashboard
+
+`http://localhost:5555` oeffnen → `+` Button oben rechts → Formular ausfuellen.
+Oder innerhalb einer Spalte auf "+ Task hinzufuegen" klicken.
+
 ## Claude-Integration (ticket-committer Skill)
 
 Der `ticket-committer` Skill verbindet Claude Code mit dem TaskBoard.
-Er wird automatisch getriggert bei Commits, Ticket-Erstellung und Implementierungsarbeit.
+Er triggert automatisch bei Saetzen wie "commit das", "erstell ein Ticket",
+"fertig", "speichern", "was ist offen" — du musst keinen speziellen Befehl kennen.
+
+### Wie der Skill funktioniert
+
+```
+~/.claude/skills/                  ← GLOBAL, gilt fuer ALLE Projekte
+  └── ticket-committer/
+      └── SKILL.md                 ← Claude laedt das automatisch
+
+/arbeit/api-backend/               ← Dein Arbeitsprojekt (eigenes Claude-Projekt)
+  └── src/...
+
+/pfad/zu/ToDoList/                 ← Das TaskBoard (eigenes Claude-Projekt)
+  ├── cli.py                       ← Der Skill ruft das per absolutem Pfad auf
+  └── data/                        ← Tickets aller Projekte leben hier
+```
+
+Der Skill liegt global in `~/.claude/skills/` und ist dadurch in JEDEM Projekt verfuegbar.
+Er ruft `cli.py` mit absolutem Pfad auf — du musst nie das Verzeichnis wechseln.
 
 ### Skill installieren
 
-Kopiere den Skill in dein Claude-Skill-Verzeichnis:
+Kopiere den Skill in dein Claude-Skill-Verzeichnis (einmalig pro Rechner):
 ```bash
+# Windows (Git Bash) / Mac / Linux
 cp -r skills/ticket-committer ~/.claude/skills/
+
+# Windows (PowerShell)
+xcopy /E /I skills\ticket-committer $env:USERPROFILE\.claude\skills\ticket-committer
 ```
 
-Passe den Pfad zur CLI in `SKILL.md` an deine Maschine an (Zeile `TASKBOARD_CLI`).
+### Typischer Arbeitsablauf mit Claude Code
 
-### Workflow
+```
+Du: "Implementiere eine Login-Seite"
 
-1. Claude prueft offene Tickets oder erstellt ein neues
-2. Setzt das Ticket auf "In Arbeit"
-3. Implementiert die Aenderung
-4. Committed mit `#ticket_id` in der Message
-5. Trackt den Commit ins Ticket
-6. Markiert das Ticket als erledigt
+Claude:
+  → Prueft offene Tickets, findet keins
+  → "Soll ich ein Ticket erstellen?"
 
-Der Skill funktioniert projektuebergreifend dank Auto-Detection.
+Du: "ja"
+
+Claude:
+  → Erstellt Ticket #a1b2c3d4 "Login-Seite implementieren"
+  → Setzt es auf "In Arbeit"
+  → Implementiert die Aenderung
+
+Du: "fertig, commit das"
+
+Claude:
+  → git add login.py templates/login.html
+  → git commit -m "Login-Seite mit Session-Handling #a1b2c3d4"
+  → Trackt den Commit ins Ticket (alle geaenderten Files)
+  → Markiert Ticket als erledigt
+```
+
+### Tickets fuer spaeter erstellen (ohne sofort zu implementieren)
+
+```
+Du: "Schreib auf: Datenbankindizes optimieren, niedrige Prio"
+
+Claude:
+  → Erstellt Ticket #f1e2d3c4 "Datenbankindizes optimieren" (P3, feature)
+  → "Ticket erstellt. Soll ich direkt anfangen?"
+
+Du: "nein, ist fuer spaeter"
+
+Claude:
+  → Ticket bleibt auf "Offen", fertig.
+```
+
+### Ausloeser-Woerter
+
+Der Skill triggert automatisch bei:
+- **Committen**: "commit das", "speichern", "fertig", "das wars", "push das"
+- **Tickets**: "erstell ein Ticket", "Ticket anlegen", "schreib auf", "Task erstellen"
+- **Status**: "was ist offen", "was muss noch gemacht werden", "markiere als fertig"
+- **Explizit**: `/ticket-committer`
+
+## Dashboard anschauen
+
+Das Dashboard startet aus dem ToDoList-Ordner:
+
+```bash
+cd /pfad/zu/ToDoList && python app.py
+# → http://localhost:5555
+```
+
+Zeigt alle registrierten Projekte in der Navbar — einfach zwischen Projekten wechseln.
+Jedes Ticket zeigt Aufwand, Zuweisung und getrackte Commits in den Notizen.
+
+Tipp — Alias setzen fuer schnellen Start von ueberall:
+```bash
+# Bash (.bashrc)
+alias taskboard="cd /pfad/zu/ToDoList && python app.py"
+
+# PowerShell ($PROFILE)
+function taskboard { cd C:\pfad\zu\ToDoList; python app.py }
+```
 
 ## Workflow: Neues Arbeitsprojekt von Null aufsetzen
 
@@ -263,7 +379,7 @@ Beispiel: Du startest ein neues Projekt auf der Arbeit.
 
 ```bash
 cd /arbeit/mein-api-projekt
-python /pfad/zu/ToDoList-Repo/cli.py init -l "API Projekt" --hook
+python /pfad/zu/ToDoList/cli.py init -l "API Projekt" --hook
 ```
 
 Output:
@@ -275,66 +391,37 @@ Output:
 
 ### 2. Tickets anlegen
 
+Per Claude Code, CLI oder Dashboard — wie oben beschrieben.
+
 ```bash
-python /pfad/zu/ToDoList-Repo/cli.py add "REST-Endpoints implementieren" -c feature -P 2
+python /pfad/zu/ToDoList/cli.py add "REST-Endpoints implementieren" -c feature -P 2
 # → #a1b2c3d4
-
-python /pfad/zu/ToDoList-Repo/cli.py add "Auth-Middleware einbauen" -c feature -P 1
-# → #e5f6a7b8
 ```
 
-### 3. Arbeit beginnen — Ticket auf "In Arbeit" setzen
-
-```bash
-python /pfad/zu/ToDoList-Repo/cli.py progress a1b2c3d4
-```
-
-### 4. Implementieren und committen
+### 3. Arbeiten und committen
 
 Normal arbeiten, dann committen mit `#ticket_id`:
 
 ```bash
-git add routes.py models.py
 git commit -m "REST-Endpoints fuer Users und Orders #a1b2c3d4"
 ```
 
-Der Post-Commit-Hook schreibt automatisch eine Zusammenfassung ins Ticket:
-welche Dateien geaendert, wieviele Zeilen, was der Commit macht.
+Der Post-Commit-Hook schreibt automatisch eine Zusammenfassung ins Ticket.
 
-### 5. Ticket abschliessen
+### 4. Ticket abschliessen
 
 ```bash
-python /pfad/zu/ToDoList-Repo/cli.py done a1b2c3d4
+python /pfad/zu/ToDoList/cli.py done a1b2c3d4
 ```
 
-### 6. Dashboard anschauen
+### 5. Dashboard anschauen
 
 ```bash
-cd /pfad/zu/ToDoList-Repo && python app.py
-# -> http://localhost:5555
+cd /pfad/zu/ToDoList && python app.py
+# → http://localhost:5555
 ```
 
 Alle Projekte (privat + Arbeit) erscheinen in der Navigation.
-Jedes Ticket zeigt die getrackten Commits in den Notizen.
-
-### 7. Von Claude Code aus (mit ticket-committer Skill)
-
-Wenn Claude Code im Repo arbeitet, triggert der `ticket-committer` Skill automatisch:
-
-```
-User: "Implementiere die Auth-Middleware"
-
-Claude:
-  1. Prueft offene Tickets → findet #e5f6a7b8
-  2. Setzt es auf "In Arbeit"
-  3. Implementiert die Aenderung
-  4. Fragt: "Soll ich committen?"
-  5. git commit -m "Auth-Middleware mit JWT implementiert #e5f6a7b8"
-  6. Trackt den Commit → Ticket zeigt alle geaenderten Files
-  7. Markiert Ticket als erledigt
-```
-
-Alles automatisch, kein manuelles Tracking noetig.
 
 ## API-Endpunkte
 
